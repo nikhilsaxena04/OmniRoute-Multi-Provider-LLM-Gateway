@@ -8,3 +8,4 @@ All notable changes to this project will be documented in this file.
 - Added Phase 1: Standard `Provider` interface and four SDK-less HTTP adapters (OpenAI, Claude, Gemini, DeepSeek).
 - Added Phase 2: Created `/v1/chat/completions` endpoint supporting both non-streaming and Server-Sent Events (SSE) streaming modes.
 - Added Phase 3: Hand-rolled DSA implementations of Token Bucket rate limiter and Sliding-Window Circuit Breaker with complete test coverage.
+- Added Phase 4: Implemented a configuration-driven `Router` with automatic failover between models utilizing the Circuit Breaker pattern.
