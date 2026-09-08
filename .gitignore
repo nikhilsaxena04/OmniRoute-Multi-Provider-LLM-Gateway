@@ -1,0 +1,42 @@
+# Binaries
+gateway/omni-router
+*.exe
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
+
+# Python
+eval/__pycache__/
+eval/*.pyc
+eval/venv/
+
+# Docker
+docker-compose.override.yml
+
+# Grafana data
+grafana/data/
+
+# Logs and Testing
+*.log
+coverage.out
+
+# Local temp/scratch
+scratch/
+.agents/scratch/
+
+# Personal Docs
+learning_log.md
+interview*.md
