@@ -1,159 +1,183 @@
-# OmniRoute — Enterprise-Grade Multi-Provider LLM Gateway 🚀
-
 <div align="center">
+
+# OmniRoute
+
+**Production-grade multi-provider LLM gateway built in Go**
+
+Route, compare, and benchmark LLM APIs — with automatic failover, real-time cost tracking, and dual observability.
 
 ![Go](https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=Prometheus&logoColor=white)
 ![Grafana](https://img.shields.io/badge/Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![LangFuse](https://img.shields.io/badge/LangFuse-4F46E5?style=for-the-badge&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-3FCF8E?style=for-the-badge&logo=supabase&logoColor=white)
 
-OmniRoute is a high-performance, highly observable API gateway built in **Go** that unifies and intelligently routes traffic across multiple Large Language Model (LLM) APIs (OpenAI, Claude, Gemini, DeepSeek). 
+<br/>
+
+**Zero third-party resilience libraries.** Circuit breakers, rate limiters, and fan-out concurrency — all built from scratch, all tested, all explainable line-by-line.
+
+[Quick Start](#-quick-start) · [API Reference](#-api-reference) · [Architecture](#-architecture) · [Build Philosophy](docs/build_plan.md) · [Configuration](#-configuration)
 
 </div>
 
 ---
 
-## 🎯 The Problem It Solves (The Azure Outage)
+## Why This Exists
 
-On September 3, 2026, a major infrastructure failure in Microsoft Azure’s East US region caused a simultaneous, 90-minute blackout across **ChatGPT, Anthropic's Claude, and xAI's Grok** — because all three competitors relied on the exact same regional cloud. Meanwhile, Google's Gemini remained fully operational on GCP. 
+On **September 3, 2026**, a major Azure East US outage took down ChatGPT, Claude, and Grok simultaneously — because all three relied on the same regional cloud. Gemini stayed up on GCP. This exposed a concentration risk that's real and growing.
 
-This exposed a massive concentration risk in AI infrastructure. If your application hardcodes a single provider (or even multiple providers on the same underlying cloud), you are vulnerable.
+OmniRoute sits between your application and the LLM providers:
 
-**OmniRoute solves this by sitting between your application and the LLMs:**
-1. **Zero Downtime Failover:** If an Azure region crashes taking OpenAI down with it, OmniRoute's custom **Sliding-Window Circuit Breaker** instantly detects the timeouts and routes the request to a fallback (like Gemini on GCP or Cerebras) before your user even notices a delay.
-2. **Benchmarking ROI & Degradation:** The built-in `/v1/compare` endpoint fans out a single prompt to *all* providers concurrently. You can mathematically benchmark P95 Latency, Quality, and USD Cost to see who is actually performing best during peak congestion.
-3. **Single Unified API:** Your application talks to OmniRoute using one standard API format. OmniRoute translates and talks to any OpenAI-compatible, Anthropic, or Gemini REST endpoint transparently.
-4. **Cost-Aware Routing:** Stop overpaying. OmniRoute checks real-time pricing configs and can dynamically route to a cheaper model if your primary model exceeds your budget threshold.
+- **Automatic failover** — sliding-window circuit breaker detects timeouts and reroutes before your user notices
+- **Side-by-side benchmarking** — one request fans out to all providers concurrently, returns latency + cost + quality for each
+- **Single unified API** — your app talks OpenAI-format to OmniRoute, OmniRoute translates to OpenAI, Anthropic, Gemini, or any OpenAI-compatible endpoint
+- **Cost-aware routing** — checks real-time pricing config and dynamically routes to a cheaper model when your primary exceeds a threshold
 
 ---
 
-## 🏗️ Architecture
+## Design Decisions
+
+> Full architecture rationale and what was deliberately scoped out: **[`docs/build_plan.md`](docs/build_plan.md)**
+
+**No third-party resilience libraries.** The circuit breaker uses a sliding-window state machine that trims failure timestamps older than the window duration — same two-pointer pattern as LeetCode 239. The rate limiter is a token bucket with mutex-guarded refill math. Both are under 80 lines each, fully tested, and have zero external dependencies.
+
+**Two observability layers serving different questions.** Prometheus + Grafana answers "what's my p95 latency across all providers?" LangFuse answers "why did *this specific request* take 3.2s?" One is aggregate system health, the other is per-request trace debugging. They're not redundant — they cover different failure modes.
+
+**Config-driven everything.** Provider endpoints, routing priorities, and token pricing all live in YAML. When Gemini dropped their Flash pricing by 40% last month, that was a one-line config change, not a code change and redeploy.
+
+**Deterministic quality scoring.** The evaluation engine scores responses by keyword recall against a fixed dataset with known-correct answers. No LLM-as-judge, no subjective rubrics — every number in the eval output is reproducible.
+
+---
+
+## Architecture
 
 ```mermaid
 graph TD
-    Client[Client / curl] -->|HTTP /v1/chat/completions| GW[Go Gateway]
-    Client -->|HTTP /v1/compare| GW
+    Client[Client / curl] -->|HTTP| GW[Go Gateway]
     
-    subgraph OmniRoute_Gateway [OmniRoute Gateway]
-        Auth[Auth Middleware] --> RateLimiter[Token Bucket Limiter]
-        RateLimiter --> Router[Priority + Cost Router]
-        Router --> CB[Sliding Window Circuit Breaker]
+    subgraph Gateway["OmniRoute Gateway (single binary)"]
+        Auth[Bearer Token Auth] --> RL[Token Bucket Rate Limiter]
+        RL --> Router[Priority + Cost Router]
+        Router --> CB[Sliding-Window Circuit Breaker]
         
         Metrics[(Prometheus Exporter)] -.-> Router
+        LF[(LangFuse Tracer)] -.-> Router
+        SB[(Supabase Logger)] -.-> Router
     end
     
-    CB -->|Priority 1| API_1(Primary Provider API)
-    CB -->|Priority 2| API_2(Fallback Provider 1)
-    CB -->|Priority 3| API_3(Fallback Provider 2)
-    CB -->|Priority 4| API_4(Fallback Provider 3)
+    CB -->|Priority 1| P1(Gemini)
+    CB -->|Priority 2| P2(Cerebras / Groq)
+    CB -->|Priority 3| P3(Claude)
+    CB -->|Priority 4| P4(OpenAI)
     
-    subgraph Observability_Stack [Observability Stack]
+    subgraph Observability
         Prom[Prometheus] -.-> Metrics
         Grafana[Grafana Dashboard] --> Prom
     end
 ```
 
----
-
-## ✨ Core Features
-
-- **Concurrent Compare Mode:** A blazing fast `/v1/compare` endpoint that executes a 4-way fan-out using Goroutines. Includes graceful partial-failure handling so one bad API key won't block the other successful requests.
-- **Config-Driven Cost Calculator:** A dynamic `pricing.yaml` mapping calculates the exact USD cost of every request in real-time based on input/output tokens. 
-- **Pure DSA Resilience:** Built-in Token Bucket Rate Limiting and Sliding-Window Circuit Breakers engineered entirely from scratch without third-party dependencies.
-- **Observability Stack:** Deep integration with `prometheus/client_golang` tracks `Requests Total`, `Latency (p95)`, and `Circuit Breaker State`. Ships with a `docker-compose.yml` that provisions Prometheus and a beautiful Grafana dashboard out-of-the-box. Also features asynchronous, zero-dependency cloud logging to **Supabase** (PostgREST) and cloud tracing to **LangFuse** (Ingestion API).
-- **Python Evaluation Engine:** Includes an asynchronous Python evaluation suite to blast the gateway with requests and generate a deterministic terminal report proving Quality %, Latency, and Cost.
+**3 Docker containers.** Gateway + Prometheus + Grafana. Under 1 GB RAM. Cloud services (LangFuse, Supabase, LLM APIs) require no containers.
 
 ---
 
-## 📁 Project Structure
+## Core Features
+
+| Feature | Implementation | Why It Matters |
+|---|---|---|
+| **Concurrent Compare** | `/v1/compare` fans out via goroutines with `context.WithTimeout` and partial-failure handling | One bad provider doesn't block the other results |
+| **Sliding-Window Circuit Breaker** | From-scratch state machine: Closed → Open → HalfOpen → Closed | Explains the two-pointer sliding window in an interview, not a library call |
+| **Token Bucket Rate Limiter** | From-scratch per-provider rate limiting with `sync.Mutex` | Capacity vs refill rate math, defensible under questioning |
+| **SSE Streaming** | `http.Flusher` + `text/event-stream` with `ctx.Done()` cancellation | Client disconnect stops upstream reads — no wasted tokens |
+| **Priority + Cost Routing** | Config-driven via `routing.yaml` + `pricing.yaml` | Business rules in config, not code. Swap providers without recompiling |
+| **Dual Observability** | Prometheus/Grafana (system) + LangFuse Cloud (per-request traces) | Aggregate health vs individual request tracing — different audiences |
+| **Async Cloud Logging** | Supabase PostgREST in a fire-and-forget goroutine | Zero impact on response latency whether Supabase is up or down |
+| **Evaluation Engine** | Python script with deterministic keyword-based quality scoring | Real, reproducible cost/quality/latency comparison across providers |
+
+---
+
+## Project Structure
 
 ```
 .
-├── gateway/                    # Go source code for the gateway server
-│   ├── main.go                 # Entrypoint — wires config, routes, server
-│   ├── go.mod / go.sum         # Go module dependencies
+├── gateway/                        # Go — the entire gateway
+│   ├── main.go                     # Entrypoint: config → routes → graceful shutdown
 │   ├── config/
-│   │   ├── config.go           # Config loader (.env + YAML parsing)
-│   │   ├── providers.yaml      # Provider definitions (URLs, models, API key env vars)
-│   │   ├── routing.yaml        # Priority order + cost threshold
-│   │   └── pricing.yaml        # Per-provider token pricing (USD per 1M tokens)
+│   │   ├── config.go               # Loads .env + YAML configs
+│   │   ├── providers.yaml          # Provider endpoints, models, API key env vars
+│   │   ├── routing.yaml            # Priority order + cost threshold
+│   │   └── pricing.yaml            # Per-provider token pricing (USD/1M tokens)
 │   ├── provider/
-│   │   ├── provider.go         # Provider interface (Complete, Stream)
-│   │   ├── openai.go           # OpenAI-compatible provider (works with Groq, etc.)
-│   │   ├── claude.go           # Anthropic Claude provider (native + OpenAI-compat mode)
-│   │   ├── gemini.go           # Google Gemini provider (native REST API)
-│   │   ├── deepseek.go         # DeepSeek provider (wraps OpenAI-compat)
-│   │   └── compat.go           # Shared OpenAI-compatible completion helper
+│   │   ├── provider.go             # Provider interface (Complete, Stream)
+│   │   ├── openai.go               # OpenAI-compatible (also Groq, Cerebras, etc.)
+│   │   ├── claude.go               # Anthropic native API
+│   │   ├── gemini.go               # Google Generative AI REST API
+│   │   ├── deepseek.go             # Wraps OpenAI-compat with different base URL
+│   │   └── compat.go               # Shared OpenAI-compatible completion helper
+│   ├── resilience/
+│   │   ├── circuitbreaker.go       # Sliding-window circuit breaker (from scratch)
+│   │   ├── circuitbreaker_test.go  # Table-driven state transition tests
+│   │   ├── ratelimiter.go          # Token bucket rate limiter (from scratch)
+│   │   └── ratelimiter_test.go     # Refill math + burst tests
 │   ├── router/
-│   │   └── router.go           # Priority + cost-aware routing with circuit breaker integration
+│   │   └── router.go               # Priority + cost-aware routing + circuit breaker integration
 │   ├── handlers/
-│   │   ├── chat.go             # /v1/chat/completions handler (complete + stream)
-│   │   └── compare.go          # /v1/compare handler (concurrent fan-out)
+│   │   ├── chat.go                 # /v1/chat/completions (complete + SSE stream)
+│   │   └── compare.go             # /v1/compare (concurrent fan-out)
 │   ├── middleware/
-│   │   └── auth.go             # Bearer token auth middleware
-│   ├── metrics/
-│   │   └── metrics.go          # Prometheus counters, histograms, gauges
-│   └── resilience/
-│       ├── circuitbreaker.go   # Sliding-window circuit breaker (from scratch)
-│       ├── circuitbreaker_test.go
-│       ├── ratelimiter.go      # Token bucket rate limiter (from scratch)
-│       └── ratelimiter_test.go
+│   │   └── auth.go                 # Bearer token auth middleware
+│   └── metrics/
+│       └── metrics.go              # Prometheus counters, histograms, gauges
+│
 ├── eval/
-│   └── evaluate_models.py      # Python evaluation/benchmarking suite
-├── prometheus/
-│   └── prometheus.yml          # Prometheus scrape config
-├── grafana/
-│   └── provisioning/           # Grafana datasource + dashboard provisioning
-├── Dockerfile                  # Multi-stage Go build
-├── docker-compose.yml          # Full stack: Gateway + Prometheus + Grafana
-├── Makefile                    # Build/run/test shortcuts
-├── .env.example                # Template for environment variables
-└── .env                        # Your actual secrets (git-ignored)
+│   ├── eval_dataset.json           # Fixed question set with expected keywords
+│   └── evaluate_models.py          # Benchmarking suite: quality, cost, latency
+│
+├── prometheus/prometheus.yml       # Scrape config
+├── grafana/provisioning/           # Datasource + dashboard provisioning
+├── docker-compose.yml              # Full stack: Gateway + Prometheus + Grafana
+├── Dockerfile                      # Multi-stage Go build
+├── Makefile                        # build / run / test / docker-up / docker-down
+└── docs/
+    └── build_plan.md               # Full design philosophy + phased build approach
 ```
 
 ---
 
-## 📋 Prerequisites
+## Quick Start
+
+### Prerequisites
 
 | Requirement | Version | Notes |
 |---|---|---|
-| **Go** | 1.25+ | Required for local builds (`go build`) |
-| **Docker & Docker Compose** | Latest | Only if using `make docker-up` |
-| **Python 3** | 3.10+ | Only for the evaluation engine (`eval/`) |
-| **curl** | Any | For testing API endpoints |
+| **Go** | 1.25+ | For local builds |
+| **Docker & Docker Compose** | Latest | For the full stack |
+| **Python 3** | 3.10+ | Only for the evaluation engine |
 
----
-
-## 🛠️ Quick Start
-
-### 1. Clone & Configure Environment
+### 1. Clone & Configure
 
 ```bash
 git clone https://github.com/nikhilsaxena04/OmniRoute-Multi-Provider-LLM-Gateway.git
 cd OmniRoute-Multi-Provider-LLM-Gateway
-```
-
-Copy the example env file and fill in your API keys:
-
-```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your actual keys:
+Edit `.env` with your API keys:
 
 ```bash
-# === LLM Provider API Keys ===
-OPENAI_API_KEY=sk-your-openai-key       # Or a Groq key if using Groq's OpenAI-compat endpoint
-CLAUDE_API_KEY=sk-ant-your-key          # Native Anthropic key (or Groq key if compat mode)
-GEMINI_API_KEY=your-gemini-key          # Google AI Studio API key
-GROQ_API_KEY=gsk-your-groq-key          # Groq API key
+# Provider API Keys
+GEMINI_API_KEY=your-gemini-key
+OPENAI_API_KEY=sk-your-openai-key
+CLAUDE_API_KEY=sk-ant-your-key
+CEREBRAS_API_KEY=your-cerebras-key
+GROQ_API_KEY=gsk-your-groq-key
 
-# === Gateway Config ===
-GATEWAY_PORT=8787                       # Port the gateway listens on (default: 8787)
-GATEWAY_API_KEY=your-gateway-auth-token # Bearer token clients must send
+# Gateway
+GATEWAY_PORT=8787
+GATEWAY_API_KEY=your-gateway-auth-token
 
-# === Observability ===
+# Observability (optional — gateway works without these)
 SUPABASE_URL=https://xyz.supabase.co
 SUPABASE_ANON_KEY=your-anon-jwt-key
 LANGFUSE_HOST=https://cloud.langfuse.com
@@ -161,78 +185,58 @@ LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 ```
 
-> **Note:** The `api_key_env` field in `providers.yaml` maps each provider to its env var. For example, if all providers use Groq's OpenAI-compatible endpoint, they can all point to `OPENAI_API_KEY`.
-
----
-
-### 2a. Run Locally (without Docker)
-
-Build and run the Go binary directly:
+### 2a. Run Locally
 
 ```bash
-# Build
-make build
-
-# Run (builds automatically if needed)
-make run
+make run          # builds + runs the Go binary
 ```
 
 Or manually:
 
 ```bash
-cd gateway
-go build -o omni-router main.go
-./omni-router
+cd gateway && go build -o omni-router main.go && ./omni-router
 ```
 
-The server starts on **`http://localhost:8787`** by default.
-
----
+Gateway starts on **`http://localhost:8787`**.
 
 ### 2b. Run the Full Stack (Docker)
 
-Starts the Gateway + Prometheus + Grafana all at once:
-
 ```bash
-make docker-up
+make docker-up    # Gateway + Prometheus + Grafana
 ```
 
-| Service | URL | Notes |
-|---|---|---|
-| **Gateway API** | `http://localhost:8787` | Main API |
-| **Prometheus** | `http://localhost:9090` | Metrics scraping |
-| **Grafana** | `http://localhost:3000` | Dashboards (no auth required) |
-
-To tear it down:
+| Service | URL |
+|---|---|
+| **Gateway** | `http://localhost:8787` |
+| **Prometheus** | `http://localhost:9090` |
+| **Grafana** | `http://localhost:3000` |
 
 ```bash
-make docker-down
+make docker-down  # tear it all down
 ```
 
----
-
-### 3. Verify It Works
+### 3. Verify
 
 ```bash
 # Health check
 curl http://localhost:8787/healthz
 # → OK
 
-# Chat completion
+# Chat completion (routes to best available provider)
 curl -X POST http://localhost:8787/v1/chat/completions \
-  -H "Authorization: Bearer my-super-secret-key" \
+  -H "Authorization: Bearer $GATEWAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Say hello in one sentence"}'
 
-# Compare all providers
+# Compare all providers (concurrent fan-out)
 curl -X POST http://localhost:8787/v1/compare \
-  -H "Authorization: Bearer my-super-secret-key" \
+  -H "Authorization: Bearer $GATEWAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Explain quantum computing in one sentence."}'
 
-# Streaming
+# SSE Streaming
 curl -N -X POST http://localhost:8787/v1/chat/completions \
-  -H "Authorization: Bearer my-super-secret-key" \
+  -H "Authorization: Bearer $GATEWAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Tell me a joke", "stream": true}'
 
@@ -242,17 +246,18 @@ curl http://localhost:8787/metrics
 
 ---
 
-## 📡 API Reference
+## API Reference
 
-All protected endpoints require `Authorization: Bearer <GATEWAY_API_KEY>` header.
+All protected endpoints require `Authorization: Bearer <GATEWAY_API_KEY>`.
 
 ### `GET /healthz`
-Health check endpoint. Returns `200 OK` with body `OK`. No auth required.
+
+Health check. Returns `200 OK`. No auth required.
 
 ### `POST /v1/chat/completions`
+
 Routes a prompt to the best available provider based on priority and cost rules.
 
-**Request Body:**
 ```json
 {
   "prompt": "Your question here",
@@ -260,28 +265,28 @@ Routes a prompt to the best available provider based on priority and cost rules.
 }
 ```
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `prompt` | string | ✅ | The user prompt to send to the LLM |
-| `stream` | bool | ❌ | Set `true` for Server-Sent Events streaming (default: `false`) |
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `prompt` | string | ✅ | — | The user prompt |
+| `stream` | bool | ❌ | `false` | `true` for Server-Sent Events streaming |
 
-**Response (non-streaming):**
+**Non-streaming response:**
 ```json
 {
   "Text": "The model's response...",
   "InputTokens": 15,
   "OutputTokens": 42,
   "Cost": 0.000293,
-  "Provider": "gemini"
+  "Provider": "gemini_3_6_flash"
 }
 ```
 
-**Response (streaming):** SSE stream with `data: <text>\n\n` chunks, ending with `data: [DONE]\n\n`.
+**Streaming response:** SSE chunks as `data: <text>\n\n`, ending with `data: [DONE]\n\n`.
 
 ### `POST /v1/compare`
-Fans out the prompt to **all** providers concurrently and returns all results.
 
-**Request Body:**
+Fans out to **all** configured providers concurrently. Returns results from each, including any errors.
+
 ```json
 {
   "prompt": "Your question here"
@@ -293,13 +298,13 @@ Fans out the prompt to **all** providers concurrently and returns all results.
 {
   "results": [
     {
-      "provider": "openai",
-      "response": { "Text": "...", "InputTokens": 10, "OutputTokens": 30, "Cost": 0.00032, "Provider": "openai" },
+      "provider": "gemini_3_6_flash",
+      "response": { "Text": "...", "InputTokens": 10, "OutputTokens": 30, "Cost": 0.00032, "Provider": "gemini_3_6_flash" },
       "latency": "1.234s",
       "cost": 0.00032
     },
     {
-      "provider": "gemini",
+      "provider": "claude_3_haiku",
       "error": "API returned status 429",
       "latency": "0.5s"
     }
@@ -308,159 +313,180 @@ Fans out the prompt to **all** providers concurrently and returns all results.
 ```
 
 ### `GET /metrics`
-Prometheus-compatible metrics endpoint. No auth required. Exposes:
+
+Prometheus-compatible. No auth required. Exposes:
 - `gateway_requests_total` — Counter by endpoint, provider, status
 - `gateway_request_duration_seconds` — Histogram of latencies
 - `gateway_circuit_state` — Gauge per provider (0=Closed, 1=Open, 2=HalfOpen)
 
 ---
 
-## ⚙️ Configuration Reference
+## Configuration
 
-All YAML config files live in `gateway/config/`.
+All YAML config lives in `gateway/config/`.
 
 ### `providers.yaml` — Provider Definitions
 
 ```yaml
 providers:
-  openai:
-    base_url: "https://api.groq.com/openai/v1"    # API base URL
-    model: "openai/gpt-oss-20b"                     # Model identifier
-    type: "openai"                                   # Protocol type: "openai", "gemini", or "anthropic"
-    api_key_env: "OPENAI_API_KEY"                    # Env var name holding the API key
-
-  gemini:
+  gemini_3_6_flash:
     base_url: "https://generativelanguage.googleapis.com/v1beta"
     model: "gemini-3.6-flash"
-    type: "gemini"
+    type: "gemini"                  # Protocol: "openai", "gemini", or "claude"
     api_key_env: "GEMINI_API_KEY"
+
+  cerebras_llama_8b:
+    base_url: "https://api.cerebras.ai/v1"
+    model: "llama3.1-8b"
+    type: "openai"                  # Any OpenAI-compatible endpoint
+    api_key_env: "CEREBRAS_API_KEY"
 ```
 
-**Supported `type` values:**
-| Type | Protocol | Used By |
+| `type` | Protocol | Works With |
 |---|---|---|
-| `openai` | OpenAI-compatible `/chat/completions` | OpenAI, Groq, DeepSeek, Together AI, any OpenAI-compat API |
-| `gemini` | Google Generative AI REST API | Google Gemini models |
-| `anthropic` | Native Anthropic `/messages` API | Claude (when using Anthropic directly) |
-
-> **Tip:** You can route *any* provider through Groq or another OpenAI-compatible endpoint by setting `type: "openai"` and pointing `base_url` to the compat endpoint.
+| `openai` | OpenAI `/chat/completions` format | OpenAI, Groq, Cerebras, DeepSeek, Together AI, any OpenAI-compat API |
+| `gemini` | Google Generative AI REST API | Gemini models |
+| `claude` | Native Anthropic `/messages` API | Claude models via Anthropic directly |
 
 ### `routing.yaml` — Priority & Cost Rules
 
 ```yaml
-priorities:        # Ordered list — first available provider wins
-  - "gemini"
-  - "openai"
-  - "claude"
-  - "deepseek"
-cost_threshold: 0.05  # Max input_per_1m price (USD). Providers above this are skipped.
+priorities:
+  - "gemini_3_6_flash"
+  - "cerebras_llama_8b"
+  - "groq_qwen_27b"
+  - "claude_3_haiku"
+  - "openai_gpt_4o_mini"
+cost_threshold: 0.05
 ```
 
-**How routing works:**
-1. Walk down the priority list
+**Routing logic:**
+1. Walk the priority list top to bottom
 2. Skip providers whose circuit breaker is **open**
-3. Skip providers whose `input_per_1m` pricing exceeds `cost_threshold`
-4. If *no* provider passes the cost filter, fall back to the **absolute cheapest available** provider
+3. Skip providers whose `input_per_1m` exceeds `cost_threshold`
+4. If *no* provider passes the cost filter, fall back to the **absolute cheapest available**
 5. On failure, the circuit breaker records it — after 3 failures in 60s, that provider is temporarily bypassed for 30s
 
 ### `pricing.yaml` — Token Pricing
 
 ```yaml
 pricing:
-  openai:
-    input_per_1m: 2.50    # USD per 1 million input tokens
-    output_per_1m: 10.00  # USD per 1 million output tokens
-  gemini:
-    input_per_1m: 1.25
-    output_per_1m: 10.00
-  deepseek:
-    input_per_1m: 0.14
-    output_per_1m: 0.28
+  gemini_3_6_flash:
+    input_per_1m: 0.075     # USD per 1M input tokens
+    output_per_1m: 0.30
+  cerebras_llama_8b:
+    input_per_1m: 0.10
+    output_per_1m: 0.10
+  claude_3_haiku:
+    input_per_1m: 0.25
+    output_per_1m: 1.25
 ```
 
-These values are used for:
-- **Cost-aware routing** (compared against `cost_threshold`)
-- **Per-request cost calculation** (returned in API responses)
+> **Note:** Prices move fast. These are in config, not code — update `pricing.yaml` before any demo.
 
 ---
 
-## 🧪 Running Tests
+## Evaluation Engine
+
+Prove the ROI of switching models with real numbers.
 
 ```bash
-make test
+cd eval && python3 evaluate_models.py
 ```
 
-This runs all Go unit tests, including circuit breaker and rate limiter tests:
-
-```bash
-cd gateway && go test ./... -v
 ```
-
----
-
-## 📊 Evaluation Engine
-
-Want to prove the ROI of switching models? Run the Python evaluation suite against your local gateway to calculate factual accuracy, TPS, and costs:
-
-```bash
-# From the project root:
-cd eval
-python3 evaluate_models.py
-```
-
-*Example Output:*
-```text
 ======================================================================
 Model               Quality %   Avg Cost $    P95 Latency
 ----------------------------------------------------------------------
-gemini              100.0       0.000142      0.82ms
-claude              100.0       0.000412      1.14ms
-openai              100.0       0.000320      0.95ms
+gemini_3_6_flash    100.0       0.000142      820.0ms
+cerebras_llama_8b   100.0       0.000085      245.0ms
+groq_qwen_27b      100.0       0.000063      312.0ms
+claude_3_haiku      100.0       0.000412      1140.0ms
 ======================================================================
 ```
 
+Quality = percentage of expected factual keywords present in the response, scored against a fixed dataset. See the [build plan](docs/build_plan.md#the-evaluation-engine--doing-quality-honestly) for why this method was chosen over LLM-as-judge or other approaches.
+
 ---
 
-## 🧰 Makefile Commands
+## Running Tests
+
+```bash
+make test
+# runs: cd gateway && go test ./... -v
+```
+
+Covers:
+- Circuit breaker state transitions (Closed → Open → HalfOpen → Closed)
+- Token bucket refill math and burst behavior
+- All tests run with `go test ./...` — no manual setup required
+
+---
+
+## Makefile Commands
 
 | Command | Description |
 |---|---|
-| `make build` | Compile the Go gateway binary (`gateway/omni-router`) |
+| `make build` | Compile the Go binary (`gateway/omni-router`) |
 | `make run` | Build and run the gateway locally |
 | `make test` | Run all unit tests with verbose output |
-| `make docker-up` | Start the full stack (Gateway + Prometheus + Grafana) |
-| `make docker-down` | Tear down the Docker stack |
-| `make clean` | Remove the compiled binary |
+| `make docker-up` | Start full stack (Gateway + Prometheus + Grafana) |
+| `make docker-down` | Tear down Docker stack |
+| `make clean` | Remove compiled binary |
 
 ---
 
-## 🌍 Environment Variables
+## Environment Variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GATEWAY_API_KEY` | ❌ | *(none)* | Bearer token for auth. If unset, auth is bypassed (useful for local dev). |
+| `GATEWAY_API_KEY` | ❌ | *(none)* | Bearer token for auth. If unset, auth is bypassed. |
 | `GATEWAY_PORT` | ❌ | `8787` | Port the gateway listens on |
-| `OPENAI_API_KEY` | ✅* | — | API key for OpenAI-compatible providers |
-| `GEMINI_API_KEY` | ✅* | — | API key for Gemini |
-| `ANTHROPIC_API_KEY` | ✅* | — | API key for Claude (native mode) |
-| `DEEPSEEK_API_KEY` | ✅* | — | API key for DeepSeek |
-| `SUPABASE_URL` | ❌ | — | Supabase project URL for cloud logging |
+| `GEMINI_API_KEY` | ✅* | — | Google AI Studio key |
+| `OPENAI_API_KEY` | ✅* | — | OpenAI key |
+| `CLAUDE_API_KEY` | ✅* | — | Anthropic key |
+| `CEREBRAS_API_KEY` | ✅* | — | Cerebras key |
+| `GROQ_API_KEY` | ✅* | — | Groq key |
+| `SUPABASE_URL` | ❌ | — | Supabase project URL (cloud logging) |
 | `SUPABASE_ANON_KEY` | ❌ | — | Supabase anon JWT key |
 | `LANGFUSE_HOST` | ❌ | — | LangFuse instance URL |
 | `LANGFUSE_PUBLIC_KEY` | ❌ | — | LangFuse public key |
 | `LANGFUSE_SECRET_KEY` | ❌ | — | LangFuse secret key |
 
-> \* Only required if the provider references it via `api_key_env` in `providers.yaml`. If a provider's env var is missing, the server will refuse to start.
+> \* Only required if referenced by a provider in `providers.yaml`. Missing keys cause startup failure.
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
-| Issue | Cause | Fix |
-|---|---|---|
-| `missing required environment variable X` on startup | Provider in `providers.yaml` references an env var that isn't set | Add the key to `.env` or export it in your shell |
-| All requests route to cheapest provider | Your `cost_threshold` in `routing.yaml` is too low — all providers exceed it | Increase `cost_threshold` or set to `0` to disable cost filtering |
-| `API returned status 401` | Invalid API key for the upstream provider | Double-check the key in `.env` matches the provider's expected format |
-| `API returned status 429` | Rate limited by upstream provider | The circuit breaker will auto-bypass after 3 failures. Consider adding more providers. |
-| Connection refused on `localhost:8787` | Server isn't running | Run `make run` or `make docker-up` |
-| `Stream not implemented for Claude/Gemini` | Streaming only works with OpenAI-compatible providers currently | Use `"stream": false` or route to an OpenAI-compat provider |
+| Issue | Fix |
+|---|---|
+| `missing required environment variable` on startup | Add the key to `.env` — provider in `providers.yaml` references it |
+| All requests route to cheapest provider | `cost_threshold` in `routing.yaml` is too low — increase it or set to `0` |
+| `API returned status 401` | Invalid upstream API key — check `.env` |
+| `API returned status 429` | Upstream rate limit — circuit breaker will auto-bypass after 3 failures |
+| Connection refused on `:8787` | Server not running — `make run` or `make docker-up` |
+
+---
+
+## Technical Decisions Log
+
+| Decision | Rationale |
+|---|---|
+| **Go over Python** | Goroutines make fan-out cheap; lower memory; faster cold start for a hot-path gateway |
+| **No resilience libraries** | Circuit breaker = sliding-window two-pointer. Rate limiter = token bucket. Must be explainable, not imported. |
+| **LangFuse Cloud, not self-hosted** | Free tier, same traces, saves 2 Docker containers |
+| **Supabase PostgREST** | Zero-dependency HTTP logging — no SQL driver, no ORM |
+| **Config-driven pricing** | LLM prices change weekly. YAML over hardcoded constants. |
+| **Keyword-based eval scoring** | Deterministic, reproducible, defensible. LLM-as-judge is a stretch goal, not the default. |
+| **3 containers, no more** | Gateway + Prometheus + Grafana. Under 1 GB RAM. Runs on anything. |
+
+---
+
+<div align="center">
+
+**[Build Philosophy & Full Design Rationale →](docs/build_plan.md)**
+
+Built by [Nikhil Saxena](https://github.com/nikhilsaxena04)
+
+</div>
