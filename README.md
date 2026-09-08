@@ -33,7 +33,7 @@ graph TD
     Client[Client / curl] -->|HTTP /v1/chat/completions| GW[Go Gateway]
     Client -->|HTTP /v1/compare| GW
     
-    subgraph OmniRoute Gateway
+    subgraph OmniRoute_Gateway [OmniRoute Gateway]
         Auth[Auth Middleware] --> RateLimiter[Token Bucket Limiter]
         RateLimiter --> Router[Priority + Cost Router]
         Router --> CB[Sliding Window Circuit Breaker]
@@ -46,7 +46,7 @@ graph TD
     CB -->|Priority 3| API_3(Fallback Provider 2)
     CB -->|Priority 4| API_4(Fallback Provider 3)
     
-    subgraph Observability Stack
+    subgraph Observability_Stack [Observability Stack]
         Prom[Prometheus] -.-> Metrics
         Grafana[Grafana Dashboard] --> Prom
     end
