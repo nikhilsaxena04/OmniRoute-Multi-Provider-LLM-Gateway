@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/nikhilsaxena04/omni-router/provider"
+	"github.com/nikhilsaxena04/omni-router/router"
 )
 
 type ChatRequest struct {
@@ -14,7 +15,7 @@ type ChatRequest struct {
 }
 
 type ChatHandler struct {
-	Provider provider.Provider
+	Router *router.Router
 }
 
 func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +43,7 @@ func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ChatHandler) handleComplete(w http.ResponseWriter, r *http.Request, prompt string) {
-	resp, err := h.Provider.Complete(r.Context(), prompt)
+	resp, err := h.Router.ExecuteComplete(r.Context(), prompt)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Provider error: %v", err), http.StatusInternalServerError)
 		return
@@ -71,7 +72,7 @@ func (h *ChatHandler) handleStream(w http.ResponseWriter, r *http.Request, promp
 	errChan := make(chan error, 1)
 
 	go func() {
-		errChan <- h.Provider.Stream(r.Context(), prompt, chunkChan)
+		errChan <- h.Router.ExecuteStream(r.Context(), prompt, chunkChan)
 	}()
 
 	for chunk := range chunkChan {

@@ -8,6 +8,7 @@ import (
 	"github.com/nikhilsaxena04/omni-router/config"
 	"github.com/nikhilsaxena04/omni-router/handlers"
 	"github.com/nikhilsaxena04/omni-router/provider"
+	"github.com/nikhilsaxena04/omni-router/router"
 )
 
 func main() {
@@ -19,7 +20,8 @@ func main() {
 
 	// 2. Load Configuration
 	cfgPath := "config/providers.yaml"
-	cfg, err := config.Load(cfgPath)
+	routingPath := "config/routing.yaml"
+	cfg, err := config.Load(cfgPath, routingPath)
 	if err != nil {
 		// Log fatal configuration error
 		slog.Error("Failed to load configuration", "error", err)
@@ -27,7 +29,7 @@ func main() {
 	}
 	slog.Info("Configuration loaded successfully", "providers_count", len(cfg.Providers))
 
-	// 3. Setup Routes
+	// 3. Setup Routes and Router
 	mux := http.NewServeMux()
 
 	// Healthz endpoint
@@ -36,9 +38,15 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
-	// Mount Phase 2 ChatHandler with OpenAI hardcoded for now
-	openAIProvider := provider.NewOpenAIProvider(cfg.Providers["openai"])
-	chatHandler := &handlers.ChatHandler{Provider: openAIProvider}
+	allProviders := []provider.Provider{
+		provider.NewOpenAIProvider(cfg.Providers["openai"]),
+		provider.NewClaudeProvider(cfg.Providers["claude"]),
+		provider.NewGeminiProvider(cfg.Providers["gemini"]),
+		provider.NewDeepSeekProvider(cfg.Providers["deepseek"]),
+	}
+	rtr := router.NewRouter(&cfg.Routing, allProviders)
+
+	chatHandler := &handlers.ChatHandler{Router: rtr}
 	mux.Handle("/v1/chat/completions", chatHandler)
 
 	// 4. Start Server
