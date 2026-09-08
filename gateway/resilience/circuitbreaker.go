@@ -78,3 +78,9 @@ func (cb *CircuitBreaker) RecordSuccess() {
 	cb.state = Closed
 	cb.failureTimestamps = nil
 }
+
+func (cb *CircuitBreaker) State() State {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	return cb.state
+}
