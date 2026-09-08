@@ -14,15 +14,17 @@ OmniRoute is a high-performance, highly observable API gateway built in **Go** t
 
 ---
 
-## 🎯 The Problem It Solves
+## 🎯 The Problem It Solves (The Azure Outage)
 
-When building AI applications, relying on a single LLM provider is a critical single point of failure. Providers experience outages, rate limits, and constant price fluctuations. 
+On September 3, 2026, a major infrastructure failure in Microsoft Azure’s East US region caused a simultaneous, 90-minute blackout across **ChatGPT, Anthropic's Claude, and xAI's Grok** — because all three competitors relied on the exact same regional cloud. Meanwhile, Google's Gemini remained fully operational on GCP. 
 
-**OmniRoute solves this by sitting between your application and the LLM APIs:**
-1. **Single Unified API:** Your application talks to OmniRoute using one standard API format. OmniRoute translates and talks to OpenAI, Claude, Gemini, or DeepSeek seamlessly.
-2. **Zero Downtime Failover:** If OpenAI is down or rate-limits you, OmniRoute's built-in **Circuit Breaker** instantly routes the request to Claude or Gemini before your user even notices a delay.
-3. **Cost-Aware Routing:** Stop overpaying. OmniRoute checks real-time pricing configs and can dynamically route to a cheaper model if your primary model exceeds your budget threshold.
-4. **Benchmarking ROI:** The built-in `/v1/compare` endpoint fans out a single prompt to *all* providers concurrently so you can mathematically benchmark Latency, Quality, and USD Cost.
+This exposed a massive concentration risk in AI infrastructure. If your application hardcodes a single provider (or even multiple providers on the same underlying cloud), you are vulnerable.
+
+**OmniRoute solves this by sitting between your application and the LLMs:**
+1. **Zero Downtime Failover:** If an Azure region crashes taking OpenAI down with it, OmniRoute's custom **Sliding-Window Circuit Breaker** instantly detects the timeouts and routes the request to a fallback (like Gemini on GCP or Cerebras) before your user even notices a delay.
+2. **Benchmarking ROI & Degradation:** The built-in `/v1/compare` endpoint fans out a single prompt to *all* providers concurrently. You can mathematically benchmark P95 Latency, Quality, and USD Cost to see who is actually performing best during peak congestion.
+3. **Single Unified API:** Your application talks to OmniRoute using one standard API format. OmniRoute translates and talks to any OpenAI-compatible, Anthropic, or Gemini REST endpoint transparently.
+4. **Cost-Aware Routing:** Stop overpaying. OmniRoute checks real-time pricing configs and can dynamically route to a cheaper model if your primary model exceeds your budget threshold.
 
 ---
 
