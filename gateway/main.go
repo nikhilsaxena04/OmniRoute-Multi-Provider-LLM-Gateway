@@ -9,6 +9,7 @@ import (
 	"github.com/nikhilsaxena04/omni-router/handlers"
 	"github.com/nikhilsaxena04/omni-router/provider"
 	"github.com/nikhilsaxena04/omni-router/router"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -51,6 +52,8 @@ func main() {
 
 	compareHandler := &handlers.CompareHandler{Providers: allProviders}
 	mux.Handle("/v1/compare", compareHandler)
+
+	mux.Handle("/metrics", promhttp.Handler())
 
 	// 4. Start Server
 	addr := ":" + cfg.Port

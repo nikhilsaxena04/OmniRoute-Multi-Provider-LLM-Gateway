@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  gateway:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your-openai-key}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY:-your-claude-key}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-your-gemini-key}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-your-deepseek-key}
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin

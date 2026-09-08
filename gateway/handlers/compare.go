@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nikhilsaxena04/omni-router/metrics"
 	"github.com/nikhilsaxena04/omni-router/provider"
 )
 
@@ -57,9 +58,13 @@ func (h *CompareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			
 			start := time.Now()
 			resp, err := prov.Complete(ctx, req.Prompt)
-			latency := time.Since(start).String()
+			dur := time.Since(start)
+			latency := dur.String()
 
 			if err != nil {
+				metrics.RequestsTotal.WithLabelValues("/v1/compare", prov.Name(), "500").Inc()
+				metrics.LatencyHistogram.WithLabelValues("/v1/compare", prov.Name()).Observe(dur.Seconds())
+
 				results[idx] = ProviderResult{
 					Provider: prov.Name(),
 					Error:    err.Error(),
@@ -67,6 +72,9 @@ func (h *CompareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				return
 			}
+
+			metrics.RequestsTotal.WithLabelValues("/v1/compare", prov.Name(), "200").Inc()
+			metrics.LatencyHistogram.WithLabelValues("/v1/compare", prov.Name()).Observe(dur.Seconds())
 
 			results[idx] = ProviderResult{
 				Provider: prov.Name(),

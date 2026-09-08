@@ -1,0 +1,39 @@
+{
+  "title": "OmniRoute Gateway",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Total Requests by Provider",
+      "targets": [
+        {
+          "expr": "rate(gateway_requests_total[1m])",
+          "legendFormat": "{{provider}} - {{status}}"
+        }
+      ],
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency (p95)",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(gateway_request_duration_seconds_bucket[1m])) by (le, provider))",
+          "legendFormat": "{{provider}}"
+        }
+      ],
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Circuit Breaker State (0=Closed, 1=Open, 2=HalfOpen)",
+      "targets": [
+        {
+          "expr": "gateway_circuit_state",
+          "legendFormat": "{{provider}}"
+        }
+      ],
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 }
+    }
+  ],
+  "schemaVersion": 36
+}

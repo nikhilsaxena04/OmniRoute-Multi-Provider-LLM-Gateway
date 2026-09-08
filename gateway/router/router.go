@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nikhilsaxena04/omni-router/config"
+	"github.com/nikhilsaxena04/omni-router/metrics"
 	"github.com/nikhilsaxena04/omni-router/provider"
 	"github.com/nikhilsaxena04/omni-router/resilience"
 )
@@ -43,18 +44,30 @@ func (r *Router) ExecuteComplete(ctx context.Context, prompt string) (*provider.
 			continue
 		}
 		
+		metrics.CircuitState.WithLabelValues(name).Set(float64(entry.Circuit.State()))
+
 		if !entry.Circuit.Allow() {
 			slog.Warn("Circuit breaker open/half-open probe denied, skipping provider", "provider", name)
 			continue
 		}
 
 		slog.Info("Routing request to provider", "provider", name)
+		
+		start := time.Now()
 		resp, err := entry.Provider.Complete(ctx, prompt)
+		duration := time.Since(start).Seconds()
+		
 		if err != nil {
-			slog.Error("Provider failed, recording circuit breaker failure", "provider", name, "error", err)
+			metrics.RequestsTotal.WithLabelValues("/v1/chat/completions", name, "500").Inc()
+			metrics.LatencyHistogram.WithLabelValues("/v1/chat/completions", name).Observe(duration)
+			
+			slog.Error("Provider failed, recording circuit breaker failure", "provider", name, "error", err.Error())
 			entry.Circuit.RecordFailure()
-			continue // try next provider in priority list
+			continue
 		}
+
+		metrics.RequestsTotal.WithLabelValues("/v1/chat/completions", name, "200").Inc()
+		metrics.LatencyHistogram.WithLabelValues("/v1/chat/completions", name).Observe(duration)
 
 		entry.Circuit.RecordSuccess()
 		return resp, nil
@@ -70,6 +83,8 @@ func (r *Router) ExecuteStream(ctx context.Context, prompt string, out chan<- pr
 			continue
 		}
 		
+		metrics.CircuitState.WithLabelValues(name).Set(float64(entry.Circuit.State()))
+
 		if !entry.Circuit.Allow() {
 			slog.Warn("Circuit breaker open/half-open probe denied, skipping provider", "provider", name)
 			continue
@@ -77,14 +92,21 @@ func (r *Router) ExecuteStream(ctx context.Context, prompt string, out chan<- pr
 
 		slog.Info("Routing stream request to provider", "provider", name)
 		
-		// Note: in a real system, if it fails mid-stream, failover is complex because 
-		// chunks were already sent to the client. Here we just return the error.
+		start := time.Now()
 		err := entry.Provider.Stream(ctx, prompt, out)
+		duration := time.Since(start).Seconds()
+
 		if err != nil {
+			metrics.RequestsTotal.WithLabelValues("/v1/chat/completions (stream)", name, "500").Inc()
+			metrics.LatencyHistogram.WithLabelValues("/v1/chat/completions (stream)", name).Observe(duration)
+
 			slog.Error("Provider stream failed, recording circuit breaker failure", "provider", name, "error", err)
 			entry.Circuit.RecordFailure()
 			continue
 		}
+
+		metrics.RequestsTotal.WithLabelValues("/v1/chat/completions (stream)", name, "200").Inc()
+		metrics.LatencyHistogram.WithLabelValues("/v1/chat/completions (stream)", name).Observe(duration)
 
 		entry.Circuit.RecordSuccess()
 		return nil
