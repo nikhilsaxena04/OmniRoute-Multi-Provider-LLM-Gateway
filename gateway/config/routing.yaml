@@ -1,0 +1,6 @@
+priorities:
+  - "gemini"
+  - "openai"
+  - "claude"
+  - "deepseek"
+cost_threshold: 0.05
