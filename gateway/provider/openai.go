@@ -92,7 +92,7 @@ func (p *OpenAIProvider) Complete(ctx context.Context, prompt string) (*Response
 
 func (p *OpenAIProvider) Stream(ctx context.Context, prompt string, out chan<- Chunk) error {
 	defer close(out)
-	
+
 	reqBody := map[string]any{
 		"model": p.cfg.Model,
 		"messages": []map[string]string{
@@ -137,7 +137,7 @@ func (p *OpenAIProvider) Stream(ctx context.Context, prompt string, out chan<- C
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
-		
+
 		dataStr := strings.TrimPrefix(line, "data: ")
 		if dataStr == "[DONE]" {
 			break

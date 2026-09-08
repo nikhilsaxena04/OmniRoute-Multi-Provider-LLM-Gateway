@@ -59,11 +59,11 @@ func (h *CompareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	for i, p := range h.Providers {
 		wg.Add(1)
-		
+
 		// Capture loop variables
 		go func(idx int, prov provider.Provider) {
 			defer wg.Done()
-			
+
 			start := time.Now()
 			resp, err := prov.Complete(ctx, req.Prompt)
 			dur := time.Since(start)

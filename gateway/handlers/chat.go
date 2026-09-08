@@ -93,7 +93,7 @@ func (h *ChatHandler) handleStream(w http.ResponseWriter, r *http.Request, promp
 	}()
 
 	for chunk := range chunkChan {
-		// Escape newlines in chunk for basic SSE formatting if needed, 
+		// Escape newlines in chunk for basic SSE formatting if needed,
 		// but simple text formatting works for the test.
 		fmt.Fprintf(w, "data: %s\n\n", chunk.Text)
 		flusher.Flush()
@@ -106,4 +106,3 @@ func (h *ChatHandler) handleStream(w http.ResponseWriter, r *http.Request, promp
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
 }
-

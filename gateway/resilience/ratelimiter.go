@@ -29,7 +29,7 @@ func (b *TokenBucket) Allow() bool {
 
 	now := time.Now()
 	elapsed := now.Sub(b.lastRefill).Seconds()
-	
+
 	// Refill tokens based on elapsed time, capped at capacity
 	b.tokens = math.Min(b.capacity, b.tokens+(elapsed*b.refillPerSecond))
 	b.lastRefill = now

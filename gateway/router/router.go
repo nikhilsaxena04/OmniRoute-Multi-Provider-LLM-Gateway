@@ -29,7 +29,7 @@ func NewRouter(cfg *config.RoutingConfig, pricing *config.PricingConfig, allProv
 		pm[p.Name()] = &ProviderEntry{
 			Provider: p,
 			// 3 failures, 60s sliding window, 30s open duration
-			Circuit:  resilience.NewCircuitBreaker(3, time.Second*60, time.Second*30),
+			Circuit: resilience.NewCircuitBreaker(3, time.Second*60, time.Second*30),
 		}
 	}
 	return &Router{
@@ -50,7 +50,7 @@ func (r *Router) getCheapestAvailable() (string, *ProviderEntry) {
 		if !ok || !entry.Circuit.Allow() {
 			continue
 		}
-		
+
 		price := 0.0
 		if r.pricing != nil {
 			if p, ok := r.pricing.Pricing[name]; ok {
@@ -76,7 +76,7 @@ func (r *Router) ExecuteComplete(ctx context.Context, prompt string) (*provider.
 		if !ok {
 			continue
 		}
-		
+
 		metrics.CircuitState.WithLabelValues(name).Set(float64(entry.Circuit.State()))
 
 		if !entry.Circuit.Allow() {
@@ -107,15 +107,15 @@ func (r *Router) ExecuteComplete(ctx context.Context, prompt string) (*provider.
 
 	if selectedEntry != nil {
 		slog.Info("Routing request to provider", "provider", selectedName)
-		
+
 		start := time.Now()
 		resp, err := selectedEntry.Provider.Complete(ctx, prompt)
 		duration := time.Since(start).Seconds()
-		
+
 		if err != nil {
 			metrics.RequestsTotal.WithLabelValues("/v1/chat/completions", selectedName, "500").Inc()
 			metrics.LatencyHistogram.WithLabelValues("/v1/chat/completions", selectedName).Observe(duration)
-			
+
 			slog.Error("Provider failed, recording circuit breaker failure", "provider", selectedName, "error", err.Error())
 			selectedEntry.Circuit.RecordFailure()
 			return nil, err // Let client retry, we tried the best one
@@ -141,7 +141,7 @@ func (r *Router) ExecuteStream(ctx context.Context, prompt string, out chan<- pr
 		if !ok {
 			continue
 		}
-		
+
 		metrics.CircuitState.WithLabelValues(name).Set(float64(entry.Circuit.State()))
 
 		if !entry.Circuit.Allow() {
@@ -172,7 +172,7 @@ func (r *Router) ExecuteStream(ctx context.Context, prompt string, out chan<- pr
 
 	if selectedEntry != nil {
 		slog.Info("Routing stream request to provider", "provider", selectedName)
-		
+
 		start := time.Now()
 		err := selectedEntry.Provider.Stream(ctx, prompt, out)
 		duration := time.Since(start).Seconds()

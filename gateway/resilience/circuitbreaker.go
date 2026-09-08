@@ -43,7 +43,7 @@ func (cb *CircuitBreaker) Allow() bool {
 		}
 		return false
 	}
-	
+
 	if cb.state == HalfOpen {
 		return false // Deny further requests until probe completes (success or failure)
 	}

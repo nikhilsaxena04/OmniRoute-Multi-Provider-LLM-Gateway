@@ -89,7 +89,7 @@ func TestCircuitBreaker_SlidingWindowCleanup(t *testing.T) {
 	if !cb.Allow() {
 		t.Errorf("Expected cb to remain Closed since old failures should be purged")
 	}
-	
+
 	cb.mu.Lock()
 	if len(cb.failureTimestamps) != 1 {
 		t.Errorf("Expected exactly 1 failure timestamp remaining, got %d", len(cb.failureTimestamps))

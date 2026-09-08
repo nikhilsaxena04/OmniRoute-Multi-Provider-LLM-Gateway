@@ -92,8 +92,6 @@ func main() {
 	// Public endpoints
 	mux.Handle("/metrics", promhttp.Handler())
 
-
-
 	// 4. Start Server with Graceful Shutdown
 	addr := ":" + cfg.Port
 	server := &http.Server{
