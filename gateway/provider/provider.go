@@ -8,6 +8,8 @@ type Response struct {
 	Text         string
 	InputTokens  int
 	OutputTokens int
+	Cost         float64 // Calculated at the routing/handler layer
+	Provider     string
 }
 
 type Chunk struct {

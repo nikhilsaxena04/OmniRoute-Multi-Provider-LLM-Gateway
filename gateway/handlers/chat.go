@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/nikhilsaxena04/omni-router/config"
 	"github.com/nikhilsaxena04/omni-router/provider"
 	"github.com/nikhilsaxena04/omni-router/router"
 )
@@ -15,7 +16,8 @@ type ChatRequest struct {
 }
 
 type ChatHandler struct {
-	Router *router.Router
+	Router  *router.Router
+	Pricing *config.PricingConfig
 }
 
 func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -49,12 +51,12 @@ func (h *ChatHandler) handleComplete(w http.ResponseWriter, r *http.Request, pro
 		return
 	}
 
+	if h.Pricing != nil {
+		resp.Cost = h.Pricing.CalculateCost(resp.Provider, resp.InputTokens, resp.OutputTokens)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"text":          resp.Text,
-		"input_tokens":  resp.InputTokens,
-		"output_tokens": resp.OutputTokens,
-	})
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (h *ChatHandler) handleStream(w http.ResponseWriter, r *http.Request, prompt string) {

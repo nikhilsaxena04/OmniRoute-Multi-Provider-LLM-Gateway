@@ -20,9 +20,7 @@ func main() {
 	slog.SetDefault(logger)
 
 	// 2. Load Configuration
-	cfgPath := "config/providers.yaml"
-	routingPath := "config/routing.yaml"
-	cfg, err := config.Load(cfgPath, routingPath)
+	cfg, err := config.Load("config/providers.yaml", "config/routing.yaml", "config/pricing.yaml")
 	if err != nil {
 		// Log fatal configuration error
 		slog.Error("Failed to load configuration", "error", err)
@@ -47,10 +45,10 @@ func main() {
 	}
 	rtr := router.NewRouter(&cfg.Routing, allProviders)
 
-	chatHandler := &handlers.ChatHandler{Router: rtr}
+	chatHandler := &handlers.ChatHandler{Router: rtr, Pricing: &cfg.Pricing}
 	mux.Handle("/v1/chat/completions", chatHandler)
 
-	compareHandler := &handlers.CompareHandler{Providers: allProviders}
+	compareHandler := &handlers.CompareHandler{Providers: allProviders, Pricing: &cfg.Pricing}
 	mux.Handle("/v1/compare", compareHandler)
 
 	mux.Handle("/metrics", promhttp.Handler())

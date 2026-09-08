@@ -70,6 +70,7 @@ func (r *Router) ExecuteComplete(ctx context.Context, prompt string) (*provider.
 		metrics.LatencyHistogram.WithLabelValues("/v1/chat/completions", name).Observe(duration)
 
 		entry.Circuit.RecordSuccess()
+		resp.Provider = name
 		return resp, nil
 	}
 

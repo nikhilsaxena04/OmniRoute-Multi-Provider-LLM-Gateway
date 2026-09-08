@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nikhilsaxena04/omni-router/config"
 	"github.com/nikhilsaxena04/omni-router/metrics"
 	"github.com/nikhilsaxena04/omni-router/provider"
 )
@@ -20,6 +21,7 @@ type ProviderResult struct {
 	Response *provider.Response `json:"response,omitempty"`
 	Error    string             `json:"error,omitempty"`
 	Latency  string             `json:"latency"`
+	Cost     float64            `json:"cost,omitempty"`
 }
 
 type CompareResponse struct {
@@ -28,6 +30,7 @@ type CompareResponse struct {
 
 type CompareHandler struct {
 	Providers []provider.Provider
+	Pricing   *config.PricingConfig
 }
 
 func (h *CompareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -76,10 +79,18 @@ func (h *CompareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			metrics.RequestsTotal.WithLabelValues("/v1/compare", prov.Name(), "200").Inc()
 			metrics.LatencyHistogram.WithLabelValues("/v1/compare", prov.Name()).Observe(dur.Seconds())
 
+			cost := 0.0
+			if h.Pricing != nil {
+				cost = h.Pricing.CalculateCost(prov.Name(), resp.InputTokens, resp.OutputTokens)
+				resp.Cost = cost
+				resp.Provider = prov.Name()
+			}
+
 			results[idx] = ProviderResult{
 				Provider: prov.Name(),
 				Response: resp,
 				Latency:  latency,
+				Cost:     cost,
 			}
 		}(i, p)
 	}

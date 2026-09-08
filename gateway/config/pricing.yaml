@@ -1,0 +1,13 @@
+pricing:
+  openai:
+    input_per_1m: 2.50
+    output_per_1m: 10.00
+  claude:
+    input_per_1m: 3.00
+    output_per_1m: 15.00
+  gemini:
+    input_per_1m: 1.25
+    output_per_1m: 10.00
+  deepseek:
+    input_per_1m: 0.14
+    output_per_1m: 0.28
