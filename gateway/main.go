@@ -49,6 +49,9 @@ func main() {
 	chatHandler := &handlers.ChatHandler{Router: rtr}
 	mux.Handle("/v1/chat/completions", chatHandler)
 
+	compareHandler := &handlers.CompareHandler{Providers: allProviders}
+	mux.Handle("/v1/compare", compareHandler)
+
 	// 4. Start Server
 	addr := ":" + cfg.Port
 	slog.Info("Starting OmniRoute Gateway", "port", cfg.Port)
