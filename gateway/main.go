@@ -48,7 +48,7 @@ func main() {
 		provider.NewGeminiProvider(cfg.Providers["gemini"]),
 		provider.NewDeepSeekProvider(cfg.Providers["deepseek"]),
 	}
-	rtr := router.NewRouter(&cfg.Routing, allProviders)
+	rtr := router.NewRouter(&cfg.Routing, &cfg.Pricing, allProviders)
 
 	chatHandler := &handlers.ChatHandler{Router: rtr, Pricing: &cfg.Pricing}
 	compareHandler := &handlers.CompareHandler{Providers: allProviders, Pricing: &cfg.Pricing}
