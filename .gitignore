@@ -22,6 +22,7 @@ vendor/
 eval/__pycache__/
 eval/*.pyc
 eval/venv/
+eval/packages/
 
 # Docker
 docker-compose.override.yml
