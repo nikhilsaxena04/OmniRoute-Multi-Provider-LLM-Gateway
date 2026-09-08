@@ -13,6 +13,7 @@ type ProviderConfig struct {
 	BaseURL   string `yaml:"base_url"`
 	Model     string `yaml:"model"`
 	APIKeyEnv string `yaml:"api_key_env"`
+	Type      string `yaml:"type"` // "openai", "anthropic", "gemini", etc.
 	APIKey    string `yaml:"-"` // Loaded from env, not yaml
 }
 

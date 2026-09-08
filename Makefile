@@ -14,11 +14,11 @@ test:
 
 # Spin up the entire stack (Gateway, Prometheus, Grafana) using Docker Compose
 docker-up:
-	docker-compose up -d --build
+	docker compose up -d --build
 
 # Tear down the stack
 docker-down:
-	docker-compose down
+	docker compose down
 
 # Clean binaries
 clean:

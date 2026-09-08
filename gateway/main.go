@@ -42,16 +42,47 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
-	allProviders := []provider.Provider{
-		provider.NewOpenAIProvider(cfg.Providers["openai"]),
-		provider.NewClaudeProvider(cfg.Providers["claude"]),
-		provider.NewGeminiProvider(cfg.Providers["gemini"]),
-		provider.NewDeepSeekProvider(cfg.Providers["deepseek"]),
+	var allProviders []provider.Provider
+	for name, pcfg := range cfg.Providers {
+		switch pcfg.Type {
+		case "openai":
+			allProviders = append(allProviders, provider.NewOpenAIProvider(pcfg, name))
+		case "claude":
+			allProviders = append(allProviders, provider.NewClaudeProvider(pcfg, name))
+		case "gemini":
+			allProviders = append(allProviders, provider.NewGeminiProvider(pcfg, name))
+		case "deepseek":
+			allProviders = append(allProviders, provider.NewDeepSeekProvider(pcfg, name))
+		default:
+			// Fallback to OpenAI API format if unknown type but assumed compatible
+			allProviders = append(allProviders, provider.NewOpenAIProvider(pcfg, name))
+		}
 	}
 	rtr := router.NewRouter(&cfg.Routing, &cfg.Pricing, allProviders)
 
-	chatHandler := &handlers.ChatHandler{Router: rtr, Pricing: &cfg.Pricing}
-	compareHandler := &handlers.CompareHandler{Providers: allProviders, Pricing: &cfg.Pricing}
+	// Observability Middleware
+	supabaseLogger := middleware.NewSupabaseLogger(
+		os.Getenv("SUPABASE_URL"),
+		os.Getenv("SUPABASE_ANON_KEY"),
+	)
+	langfuseTracer := middleware.NewLangfuseTracer(
+		os.Getenv("LANGFUSE_HOST"),
+		os.Getenv("LANGFUSE_PUBLIC_KEY"),
+		os.Getenv("LANGFUSE_SECRET_KEY"),
+	)
+
+	chatHandler := &handlers.ChatHandler{
+		Router:  rtr,
+		Pricing: &cfg.Pricing,
+		Logger:  supabaseLogger,
+		Tracer:  langfuseTracer,
+	}
+	compareHandler := &handlers.CompareHandler{
+		Providers: allProviders,
+		Pricing:   &cfg.Pricing,
+		Logger:    supabaseLogger,
+		Tracer:    langfuseTracer,
+	}
 	gatewayKey := os.Getenv("GATEWAY_API_KEY")
 
 	// Protected endpoints
@@ -60,10 +91,8 @@ func main() {
 
 	// Public endpoints
 	mux.Handle("/metrics", promhttp.Handler())
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK\n"))
-	})
+
+
 
 	// 4. Start Server with Graceful Shutdown
 	addr := ":" + cfg.Port

@@ -13,17 +13,19 @@ import (
 type GeminiProvider struct {
 	cfg    *config.ProviderConfig
 	client *http.Client
+	name   string
 }
 
-func NewGeminiProvider(cfg *config.ProviderConfig) *GeminiProvider {
+func NewGeminiProvider(cfg *config.ProviderConfig, name string) *GeminiProvider {
 	return &GeminiProvider{
 		cfg:    cfg,
 		client: &http.Client{},
+		name:   name,
 	}
 }
 
 func (p *GeminiProvider) Name() string {
-	return "gemini"
+	return p.name
 }
 
 func (p *GeminiProvider) Complete(ctx context.Context, prompt string) (*Response, error) {

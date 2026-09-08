@@ -15,17 +15,19 @@ import (
 type OpenAIProvider struct {
 	cfg    *config.ProviderConfig
 	client *http.Client
+	name   string
 }
 
-func NewOpenAIProvider(cfg *config.ProviderConfig) *OpenAIProvider {
+func NewOpenAIProvider(cfg *config.ProviderConfig, name string) *OpenAIProvider {
 	return &OpenAIProvider{
 		cfg:    cfg,
 		client: &http.Client{},
+		name:   name,
 	}
 }
 
 func (p *OpenAIProvider) Name() string {
-	return "openai"
+	return p.name
 }
 
 func (p *OpenAIProvider) Complete(ctx context.Context, prompt string) (*Response, error) {

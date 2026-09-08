@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/nikhilsaxena04/omni-router/config"
+	"github.com/nikhilsaxena04/omni-router/middleware"
 	"github.com/nikhilsaxena04/omni-router/provider"
 	"github.com/nikhilsaxena04/omni-router/router"
 )
@@ -18,6 +20,8 @@ type ChatRequest struct {
 type ChatHandler struct {
 	Router  *router.Router
 	Pricing *config.PricingConfig
+	Logger  *middleware.SupabaseLogger
+	Tracer  *middleware.LangfuseTracer
 }
 
 func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +49,10 @@ func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ChatHandler) handleComplete(w http.ResponseWriter, r *http.Request, prompt string) {
+	start := time.Now()
 	resp, err := h.Router.ExecuteComplete(r.Context(), prompt)
+	latencyMs := time.Since(start).Milliseconds()
+
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Provider error: %v", err), http.StatusInternalServerError)
 		return
@@ -53,6 +60,14 @@ func (h *ChatHandler) handleComplete(w http.ResponseWriter, r *http.Request, pro
 
 	if h.Pricing != nil {
 		resp.Cost = h.Pricing.CalculateCost(resp.Provider, resp.InputTokens, resp.OutputTokens)
+	}
+
+	// Fire-and-forget: async cloud logging and tracing
+	if h.Logger != nil {
+		h.Logger.LogRequest(prompt, resp.Provider, resp.InputTokens, resp.OutputTokens, resp.Cost, latencyMs)
+	}
+	if h.Tracer != nil {
+		h.Tracer.TraceGeneration(prompt, resp.Text, resp.Provider, resp.Provider, resp.InputTokens, resp.OutputTokens, resp.Cost, latencyMs)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -91,3 +106,4 @@ func (h *ChatHandler) handleStream(w http.ResponseWriter, r *http.Request, promp
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
 }
+

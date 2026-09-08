@@ -5,11 +5,8 @@ services:
     build: .
     ports:
       - "8787:8787"
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-your-openai-key}
-      - CLAUDE_API_KEY=${CLAUDE_API_KEY:-your-claude-key}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-your-gemini-key}
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-your-deepseek-key}
+    env_file:
+      - .env
 
   prometheus:
     image: prom/prometheus:latest

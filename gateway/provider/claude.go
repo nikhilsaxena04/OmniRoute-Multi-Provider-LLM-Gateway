@@ -13,20 +13,28 @@ import (
 type ClaudeProvider struct {
 	cfg    *config.ProviderConfig
 	client *http.Client
+	name   string
 }
 
-func NewClaudeProvider(cfg *config.ProviderConfig) *ClaudeProvider {
+func NewClaudeProvider(cfg *config.ProviderConfig, name string) *ClaudeProvider {
 	return &ClaudeProvider{
 		cfg:    cfg,
 		client: &http.Client{},
+		name:   name,
 	}
 }
 
 func (p *ClaudeProvider) Name() string {
-	return "claude"
+	return p.name
 }
 
 func (p *ClaudeProvider) Complete(ctx context.Context, prompt string) (*Response, error) {
+	// If type is "openai", use OpenAI-compatible endpoint (e.g. Groq)
+	if p.cfg.Type == "openai" {
+		return completeOpenAICompat(ctx, p.client, p.cfg, prompt)
+	}
+
+	// Default: native Anthropic API
 	reqBody := map[string]any{
 		"model":      p.cfg.Model,
 		"max_tokens": 1024,

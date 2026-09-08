@@ -33,20 +33,33 @@ def run_eval():
     
     for item in dataset:
         try:
-            resp = requests.post(GATEWAY_URL, json={"query": item["question"]}, headers=headers, timeout=30)
+            resp = requests.post(GATEWAY_URL, json={"prompt": item["question"]}, headers=headers, timeout=65)
             resp.raise_for_status()
             
-            for r in resp.json()["results"]:
+            for r in resp.json().get("results", []):
                 provider = r.get("provider", "unknown")
                 bucket = per_provider.setdefault(provider, {"scores": [], "latencies": [], "costs": []})
                 
                 if r.get("error"):
                     continue
                     
-                response_text = r.get("response", "")
+                response_obj = r.get("response", {})
+                response_text = response_obj.get("Text", "") if isinstance(response_obj, dict) else str(response_obj)
+                
                 bucket["scores"].append(score_answer(response_text, item.get("expected_keywords", [])))
-                bucket["latencies"].append(r.get("latency_ms", 0))
-                bucket["costs"].append(r.get("cost_usd", 0.0))
+                
+                # Parse latency like "46.797s" or "534ms" into ms
+                lat_str = r.get("latency", "0s")
+                lat_ms = 0.0
+                if lat_str.endswith("ms"):
+                    lat_ms = float(lat_str[:-2])
+                elif lat_str.endswith("s"):
+                    lat_ms = float(lat_str[:-1]) * 1000
+                elif lat_str.endswith("m"):
+                    lat_ms = float(lat_str[:-1]) * 60000
+                    
+                bucket["latencies"].append(lat_ms)
+                bucket["costs"].append(r.get("cost", 0.0))
         except Exception as e:
             print(f"Request failed: {e}")
 

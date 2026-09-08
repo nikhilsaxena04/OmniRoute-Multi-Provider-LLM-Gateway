@@ -1,20 +1,30 @@
 providers:
-  openai:
-    base_url: "https://api.openai.com/v1"
-    model: "gpt-4o"
-    api_key_env: "OPENAI_API_KEY"
-
-  claude:
-    base_url: "https://api.anthropic.com/v1"
-    model: "claude-3-5-sonnet-20240620"
-    api_key_env: "ANTHROPIC_API_KEY"
-
-  gemini:
+  gemini_3_6_flash:
     base_url: "https://generativelanguage.googleapis.com/v1beta"
-    model: "gemini-1.5-pro"
+    model: "gemini-3.6-flash"
+    type: "gemini"
     api_key_env: "GEMINI_API_KEY"
 
-  deepseek:
-    base_url: "https://api.deepseek.com/v1"
-    model: "deepseek-chat"
-    api_key_env: "DEEPSEEK_API_KEY"
+  cerebras_llama_8b:
+    base_url: "https://api.cerebras.ai/v1"
+    model: "llama3.1-8b"
+    type: "openai"
+    api_key_env: "CEREBRAS_API_KEY"
+
+  groq_qwen_27b:
+    base_url: "https://api.groq.com/openai/v1"
+    model: "qwen/qwen3.8-27b"
+    type: "openai"
+    api_key_env: "GROQ_API_KEY"
+
+  claude_3_haiku:
+    base_url: "https://api.anthropic.com/v1"
+    model: "claude-3-haiku-20240307"
+    type: "claude"
+    api_key_env: "CLAUDE_API_KEY"
+
+  openai_gpt_4o_mini:
+    base_url: "https://api.openai.com/v1"
+    model: "gpt-4o-mini"
+    type: "openai"
+    api_key_env: "OPENAI_API_KEY"

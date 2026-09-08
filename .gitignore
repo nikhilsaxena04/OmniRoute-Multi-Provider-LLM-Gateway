@@ -11,6 +11,11 @@ gateway/omni-router
 .vscode/
 .idea/
 
+# Local log files
+*.log
+gateway/compare_logs.jsonl
+Thumbs.db
+
 # OS
 .DS_Store
 Thumbs.db

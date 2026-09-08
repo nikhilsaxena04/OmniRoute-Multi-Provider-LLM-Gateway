@@ -1,6 +1,7 @@
 priorities:
-  - "gemini"
-  - "openai"
-  - "claude"
-  - "deepseek"
+  - "gemini_3_6_flash"
+  - "cerebras_llama_8b"
+  - "groq_qwen_27b"
+  - "claude_3_haiku"
+  - "openai_gpt_4o_mini"
 cost_threshold: 0.05

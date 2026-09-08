@@ -1,13 +1,16 @@
 pricing:
-  openai:
-    input_per_1m: 2.50
-    output_per_1m: 10.00
-  claude:
-    input_per_1m: 3.00
-    output_per_1m: 15.00
-  gemini:
-    input_per_1m: 1.25
-    output_per_1m: 10.00
-  deepseek:
-    input_per_1m: 0.14
-    output_per_1m: 0.28
+  gemini_3_6_flash:
+    input_per_1m: 0.075
+    output_per_1m: 0.30
+  cerebras_llama_8b:
+    input_per_1m: 0.10
+    output_per_1m: 0.10
+  groq_qwen_27b:
+    input_per_1m: 0.06
+    output_per_1m: 0.08
+  claude_3_haiku:
+    input_per_1m: 0.25
+    output_per_1m: 1.25
+  openai_gpt_4o_mini:
+    input_per_1m: 0.15
+    output_per_1m: 0.60
